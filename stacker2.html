@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STACK // Protocol Select</title>
+<style>
+  :root{
+    --bg: #0a0e14;
+    --panel: #10161f;
+    --panel-edge: #1c2733;
+    --line: #223140;
+    --text: #d7e2ea;
+    --dim: #5c7387;
+    --cyan: #4fd6c4;
+    --amber: #e8a23a;
+    --magenta: #d9548c;
+    --danger: #e05a4e;
+    --mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+    --sans: 'Inter', -apple-system, sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background: radial-gradient(ellipse at top, #0d1420 0%, #070a10 65%);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height:100vh;
+    padding: 24px 16px 100px;
+  }
+  .scanline{
+    position:fixed; inset:0; pointer-events:none; z-index:50;
+    background: repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px);
+    mix-blend-mode: overlay;
+  }
+  header{
+    max-width: 720px; margin: 0 auto 28px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 18px;
+  }
+  .brand{
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.15em;
+    color: var(--dim);
+  }
+  h1{
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 26px;
+    margin-top: 6px;
+    color: var(--text);
+  }
+  h1 span{color: var(--cyan);}
+  .sub{
+    font-size: 13px;
+    color: var(--dim);
+    margin-top: 6px;
+    max-width: 54ch;
+    line-height: 1.5;
+  }
+
+  .search{
+    max-width: 720px; margin: 0 auto 20px;
+    display:flex; gap: 10px;
+  }
+  .search input{
+    flex:1;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    padding: 11px 14px;
+    border-radius: 3px;
+    outline: none;
+  }
+  .search input:focus{ border-color: var(--cyan); }
+  .search input::placeholder{ color: var(--dim); }
+
+  .wrap{ max-width: 720px; margin: 0 auto; display:flex; flex-direction:column; gap:18px; }
+
+  section.block{
+    background: linear-gradient(180deg, var(--panel), #0d131b);
+    border: 1px solid var(--panel-edge);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .block-head{
+    display:flex; align-items:baseline; justify-content:space-between;
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .block-head h2{
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    color: var(--dim);
+    font-weight: 500;
+  }
+  .block-head .count{
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--dim);
+  }
+
+  .stack-row, .peptide-row{
+    display:flex;
+    align-items:flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  .stack-row:last-child, .peptide-row:last-child{ border-bottom:none; }
+  .stack-row:hover, .peptide-row:hover{ background: rgba(79,214,196,0.04); }
+
+  .box{
+    width: 18px; height: 18px;
+    border: 1.5px solid var(--dim);
+    border-radius: 3px;
+    flex-shrink: 0;
+    margin-top: 2px;
+    position: relative;
+    transition: all 0.15s ease;
+  }
+  .box.checked{
+    background: var(--cyan);
+    border-color: var(--cyan);
+  }
+  .box.checked::after{
+    content:'';
+    position:absolute; left:5px; top:1px;
+    width:5px; height:9px;
+    border: solid #051012;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  .box.partial{
+    border-color: var(--amber);
+    background: rgba(232,162,58,0.15);
+  }
+  .box.partial::after{
+    content:'';
+    position:absolute; left:4px; top:7px;
+    width:8px; height:2px;
+    background: var(--amber);
+  }
+
+  .row-main{ flex:1; min-width:0; }
+  .row-title{
+    font-size: 14.5px;
+    font-weight: 500;
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  }
+  .row-title .abbr{ font-family: var(--mono); }
+  .tag{
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    padding: 1px 6px;
+    border-radius: 2px;
+    border: 1px solid var(--line);
+    color: var(--dim);
+  }
+  .tag.repair{ color: var(--cyan); border-color: rgba(79,214,196,0.35); }
+  .tag.skin{ color: var(--magenta); border-color: rgba(217,84,140,0.35); }
+  .tag.gh{ color: var(--amber); border-color: rgba(232,162,58,0.35); }
+  .tag.metabolic{ color: #7fa8e0; border-color: rgba(127,168,224,0.35); }
+  .tag.cog{ color: #b18cd9; border-color: rgba(177,140,217,0.35); }
+
+  .row-sub{
+    font-size: 12px;
+    color: var(--dim);
+    margin-top: 3px;
+    line-height: 1.4;
+  }
+  .row-components{
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--dim);
+    margin-top: 5px;
+  }
+  .row-components b{ color: var(--cyan); font-weight: 500; }
+
+  .empty{
+    padding: 22px 16px;
+    color: var(--dim);
+    font-size: 13px;
+    text-align:center;
+  }
+
+  /* summary bar */
+  .summary{
+    position: fixed; left:0; right:0; bottom:0;
+    background: rgba(10,14,20,0.92);
+    backdrop-filter: blur(8px);
+    border-top: 1px solid var(--line);
+    padding: 14px 16px;
+    z-index: 40;
+  }
+  .summary-inner{
+    max-width: 720px; margin: 0 auto;
+    display:flex; align-items:center; justify-content:space-between; gap: 14px;
+  }
+  .summary-left{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .summary-count{
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--cyan);
+  }
+  .summary-list{
+    font-size: 11.5px;
+    color: var(--dim);
+    white-space: nowrap;
+    overflow:hidden;
+    text-overflow: ellipsis;
+    max-width: 380px;
+  }
+  .continue-btn{
+    font-family: var(--mono);
+    font-size: 12.5px;
+    letter-spacing: 0.05em;
+    background: var(--cyan);
+    color: #051012;
+    border: none;
+    padding: 11px 18px;
+    border-radius: 3px;
+    cursor:pointer;
+    white-space: nowrap;
+    transition: filter 0.15s ease;
+  }
+  .continue-btn:disabled{
+    background: var(--panel-edge);
+    color: var(--dim);
+    cursor: not-allowed;
+  }
+  .continue-btn:not(:disabled):hover{ filter: brightness(1.08); }
+
+  ::-webkit-scrollbar{ width: 8px; }
+  ::-webkit-scrollbar-thumb{ background: var(--panel-edge); border-radius:4px; }
+</style>
+</head>
+<body>
+<div class="scanline"></div>
+
+<div id="page1">
+<header>
+  <div class="brand">STACKER // PROTOCOL BUILDER <span style="color:var(--cyan);">build 14</span></div>
+  <h1>What are you <span>running</span>?</h1>
+  <div class="sub">Select the individual compounds and known stacks you currently have on hand or are running. This builds your protocol list — dosing, schedule, and reference data come next.</div>
+</header>
+
+<div class="search">
+  <input id="searchInput" type="text" placeholder="Search compounds (e.g. BPC, GHK, ipamorelin)..." autocomplete="off">
+</div>
+
+<div class="wrap">
+  <section class="block">
+    <div class="block-head">
+      <h2>KNOWN STACKS</h2>
+      <span class="count" id="stackCount">0 / 0</span>
+    </div>
+    <div id="stackList"></div>
+  </section>
+
+  <section class="block" id="customToggleSection">
+    <div class="block-head">
+      <h2>CUSTOM BLEND</h2>
+      <span class="count" id="blendSlotCount">0 / 5</span>
+    </div>
+    <div id="customToggleHost"></div>
+    <div id="customBlockSection" style="display:none; border-top:1px solid var(--line);">
+      <div style="padding: 14px 16px;">
+        <div id="blendRows"></div>
+        <button id="addBlendRow" class="continue-btn" style="background:transparent; border:1px solid var(--line); color: var(--cyan); margin-top:6px; padding:9px 14px; font-size:12px;">+ Add peptide</button>
+
+        <div style="margin-top:16px; display:flex; gap:10px; align-items:center;">
+          <label style="font-family:var(--mono); font-size:11px; color:var(--dim); white-space:nowrap;">VIAL SIZE (mL)</label>
+          <input id="vialSize" type="number" step="0.1" placeholder="e.g. 3" style="width:90px; background: var(--bg); border:1px solid var(--line); color:var(--text); font-size:13px; padding:8px 10px; border-radius:3px;">
+        </div>
+
+        <button id="generateNameBtn" class="continue-btn" style="width:100%; margin-top:16px; padding:13px;">Generate Blend Name</button>
+
+        <div id="blendResult" style="display:none; margin-top:16px; border-top:1px solid var(--line); padding-top:16px;">
+          <div style="font-family:var(--mono); font-size:11px; color:var(--dim); letter-spacing:0.1em;">YOUR BLEND IS CALLED</div>
+          <div id="blendName" style="font-family:var(--mono); font-size:28px; color:var(--cyan); margin-top:4px;"></div>
+          <div id="blendVerdict" style="font-size:12px; color:var(--dim); margin-top:6px; line-height:1.5;"></div>
+          <div id="blendConcentrations" style="margin-top:12px; font-family:var(--mono); font-size:12px; color:var(--dim); line-height:1.8;"></div>
+          <button id="regenBtn" style="margin-top:10px; background:transparent; border:1px solid var(--line); color:var(--amber); font-family:var(--mono); font-size:11px; padding:8px 12px; border-radius:3px; cursor:pointer;">↻ Reroll name</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <div class="block-head">
+      <h2>INDIVIDUAL PEPTIDES</h2>
+      <span class="count" id="peptideCount">0 / 0</span>
+    </div>
+    <div id="peptideList"></div>
+  </section>
+</div>
+
+</div><!-- /page1 -->
+
+<div id="page2" style="display:none;">
+  <header>
+    <div class="brand">STACKER // YOUR PROTOCOL</div>
+    <h1>Your <span>stack</span></h1>
+    <div class="sub">Everything you selected, alphabetized. Tap <em>Reconstitute</em> on any item to run the mixing math for it.</div>
+  </header>
+
+  <div class="wrap">
+    <section class="block" id="conflictSection" style="display:none;">
+      <div class="block-head">
+        <h2>MECHANISM OVERLAP</h2>
+        <span class="count" id="conflictCount"></span>
+      </div>
+      <div id="conflictList"></div>
+    </section>
+
+    <section class="block">
+      <div class="block-head">
+        <h2>YOUR COMPOUNDS</h2>
+        <span class="count" id="protocolCount"></span>
+      </div>
+      <div id="protocolList"></div>
+    </section>
+  </div>
+</div>
+
+<div class="summary" id="summaryBar">
+  <div class="summary-inner">
+    <div class="summary-left">
+      <div class="summary-count" id="selectedCount">0 selected</div>
+      <div class="summary-list" id="selectedList">Nothing selected yet</div>
+    </div>
+    <button class="continue-btn" id="continueBtn" disabled>Continue →</button>
+  </div>
+</div>
+
+<script>
+// ---- Data ----
+// Individual peptide database
+const PEPTIDES = [
+  { id: "5amino1mq",   name: "5-Amino-1MQ",       tags: ["metabolic"] },
+  { id: "adipotide",   name: "Adipotide",         tags: ["metabolic"] },
+  { id: "ace031",      name: "ACE-031",           tags: ["repair"] },
+  { id: "adamax",      name: "Adamax",            tags: ["cog"] },
+  { id: "aicar",       name: "AICAR",             tags: ["metabolic"] },
+  { id: "aod9604",     name: "AOD-9604",          tags: ["metabolic"] },
+  { id: "ara290",      name: "ARA-290",           tags: ["repair"] },
+  { id: "argireline",  name: "Argireline (Acetyl Hexapeptide-8)", tags: ["skin"] },
+  { id: "bpc157",      name: "BPC-157",           tags: ["repair"] },
+  { id: "cagrilintide",name: "Cagrilintide",      tags: ["metabolic"] },
+  { id: "cerebrolysin",name: "Cerebrolysin",      tags: ["cog"] },
+  { id: "cjc1295",     name: "CJC-1295",          tags: ["gh"] },
+  { id: "dsip",        name: "DSIP",              tags: ["cog"] },
+  { id: "epithalon",   name: "Epithalon",         tags: ["repair"] },
+  { id: "exenatide",   name: "Exenatide",         tags: ["metabolic"] },
+  { id: "follistatin", name: "Follistatin-344",   tags: ["metabolic"] },
+  { id: "ghkcu",       name: "GHK-Cu",            tags: ["skin","repair"] },
+  { id: "ghrh",        name: "GHRH",              tags: ["gh"] },
+  { id: "ghrp1",       name: "GHRP-1",            tags: ["gh"] },
+  { id: "ghrp2",       name: "GHRP-2",            tags: ["gh"] },
+  { id: "ghrp6",       name: "GHRP-6",            tags: ["gh"] },
+  { id: "glutathione", name: "Glutathione",       tags: ["metabolic"] },
+  { id: "gonadorelin", name: "Gonadorelin",       tags: ["metabolic"] },
+  { id: "hcg",         name: "HCG",               tags: ["metabolic"] },
+  { id: "hexarelin",   name: "Hexarelin",         tags: ["gh"] },
+  { id: "hgh-frag",    name: "HGH Fragment 176-191", tags: ["metabolic"] },
+  { id: "humanin",     name: "Humanin",           tags: ["repair"] },
+  { id: "igf1lr3",     name: "IGF-1 LR3",         tags: ["gh"] },
+  { id: "ipamorelin",  name: "Ipamorelin",        tags: ["gh"] },
+  { id: "kisspeptin",  name: "Kisspeptin-10",     tags: ["metabolic"] },
+  { id: "klotho",      name: "Klotho",            tags: ["repair"] },
+  { id: "kpv",         name: "KPV",               tags: ["repair"] },
+  { id: "larazotide",  name: "Larazotide Acetate",tags: ["metabolic"] },
+  { id: "liraglutide", name: "Liraglutide",       tags: ["metabolic"] },
+  { id: "ll37",        name: "LL-37",             tags: ["repair"] },
+  { id: "melanotan1",  name: "Melanotan I",       tags: ["skin"] },
+  { id: "melanotan2",  name: "Melanotan II",      tags: ["skin"] },
+  { id: "mk677",       name: "MK-677",            tags: ["gh"] },
+  { id: "motsc",       name: "MOTS-c",            tags: ["metabolic"] },
+  { id: "nad",         name: "NAD+",              tags: ["metabolic"] },
+  { id: "oxytocin",    name: "Oxytocin",          tags: ["cog"] },
+  { id: "p21",         name: "P21",               tags: ["cog"] },
+  { id: "pinealon",    name: "Pinealon",          tags: ["cog"] },
+  { id: "pt141",       name: "PT-141",            tags: ["metabolic"] },
+  { id: "retatrutide", name: "Retatrutide",       tags: ["metabolic"] },
+  { id: "selank",      name: "Selank",            tags: ["cog"] },
+  { id: "semaglutide", name: "Semaglutide",       tags: ["metabolic"] },
+  { id: "semax",       name: "Semax",             tags: ["cog"] },
+  { id: "sermorelin",  name: "Sermorelin",        tags: ["gh"] },
+  { id: "setmelanotide",name:"Setmelanotide",     tags: ["metabolic"] },
+  { id: "snap8",       name: "SNAP-8",            tags: ["skin"] },
+  { id: "ss31",        name: "SS-31 (Elamipretide)", tags: ["repair"] },
+  { id: "survodutide", name: "Survodutide",       tags: ["metabolic"] },
+  { id: "tb500",       name: "TB-500",            tags: ["repair"] },
+  { id: "tesamorelin", name: "Tesamorelin",       tags: ["gh"] },
+  { id: "thymalin",    name: "Thymalin",          tags: ["repair"] },
+  { id: "thymogen",    name: "Thymogen",          tags: ["repair"] },
+  { id: "thymosina1",  name: "Thymosin Alpha-1",  tags: ["repair"] },
+  { id: "thymosinb4",  name: "Thymosin Beta-4",   tags: ["repair"] },
+  { id: "tirzepatide", name: "Tirzepatide",       tags: ["metabolic"] },
+  { id: "vip",         name: "VIP",               tags: ["repair"] },
+].sort((a,b) => a.name.localeCompare(b.name));
+
+// Known stacks — map to component peptide ids
+const STACKS = [
+  {
+    id: "fountain-of-youth",
+    name: "Fountain of Youth",
+    tags: ["skin","repair"],
+    components: ["epithalon","ghkcu"],
+    note: "Longevity/DNA-repair + collagen pairing"
+  },
+  {
+    id: "glow",
+    name: "GLOW",
+    tags: ["skin","repair"],
+    components: ["ghkcu","bpc157","tb500"],
+    note: "Repair + collagen/skin remodeling"
+  },
+  {
+    id: "klow",
+    name: "KLOW",
+    tags: ["skin","repair"],
+    components: ["ghkcu","bpc157","tb500","kpv"],
+    note: "GLOW + anti-inflammatory arm"
+  },
+  {
+    id: "wolverine",
+    name: "Wolverine",
+    tags: ["repair"],
+    components: ["bpc157","tb500"],
+    note: "Base repair pair, no skin component"
+  },
+  {
+    id: "ipa-cjc",
+    name: "Ipamorelin / CJC-1295",
+    tags: ["gh"],
+    components: ["ipamorelin","cjc1295"],
+    note: "Common GH-axis pairing"
+  },
+  {
+    id: "cognitive-stack",
+    name: "Semax / Selank",
+    tags: ["cog"],
+    components: ["semax","selank"],
+    note: "Common nootropic pairing"
+  },
+].sort((a,b) => a.name.localeCompare(b.name));
+
+const TAG_LABEL = { repair:"REPAIR", skin:"SKIN", gh:"GH-AXIS", metabolic:"METABOLIC", cog:"COGNITIVE" };
+
+// Common vial sizes (mg) as typically sold — packaging reference only, not dosing guidance.
+// Falls back to DEFAULT_VIAL_SIZES for anything not listed here.
+const VIAL_SIZES = {
+  "5amino1mq": [50],
+  "adipotide": [5,10],
+  "aicar": [50,100],
+  "aod9604": [2,5],
+  "ara290": [4,10],
+  "bpc157": [5,10],
+  "cagrilintide": [5,10],
+  "cjc1295": [2,5],
+  "dsip": [5],
+  "epithalon": [10,50],
+  "follistatin": [1,2],
+  "ghkcu": [50,100],
+  "ghrh": [2,5],
+  "ghrp1": [5,10],
+  "ghrp2": [5,10],
+  "ghrp6": [5,10],
+  "glutathione": [600,1000],
+  "gonadorelin": [2,5],
+  "hexarelin": [2,5],
+  "humanin": [5,10],
+  "igf1lr3": [1,10],
+  "ipamorelin": [2,5,10],
+  "kisspeptin": [5,10],
+  "klotho": [1],
+  "kpv": [10],
+  "liraglutide": [18],
+  "ll37": [10],
+  "melanotan1": [10],
+  "melanotan2": [10],
+  "motsc": [10],
+  "nad": [100,500],
+  "oxytocin": [2,10],
+  "p21": [5,10],
+  "adamax": [5,10],
+  "pinealon": [10,20],
+  "pt141": [10],
+  "retatrutide": [5,10,20],
+  "selank": [5,10],
+  "semaglutide": [2,5,10],
+  "semax": [5,10],
+  "sermorelin": [2,5],
+  "setmelanotide": [10],
+  "ss31": [50,100],
+  "tb500": [5,10],
+  "tesamorelin": [5,10],
+  "thymalin": [10],
+  "thymogen": [1,10],
+  "thymosina1": [10],
+  "thymosinb4": [5,10],
+  "tirzepatide": [5,10,15,30],
+  "vip": [5],
+};
+// Compounds sold and dosed in International Units rather than mg.
+// Handled natively (vial in IU, dose in IU) so no IU<->mg conversion is ever applied —
+// IU is defined by biological activity and differs per substance.
+const IU_COMPOUNDS = {
+  "hcg": { vials: [2000, 5000, 10000], doses: [125,250,500,750,1000,1500,2000,2500,5000] }
+};
+function isIU(peptideId){ return !!IU_COMPOUNDS[peptideId]; }
+
+const DEFAULT_VIAL_SIZES = [1,2,5,10,20,50];
+const ALL_COMMON_SIZES = [1,2,4,5,10,15,18,20,30,50,100,500,600,1000];
+function vialSizesFor(peptideId){
+  return VIAL_SIZES[peptideId] || DEFAULT_VIAL_SIZES;
+}
+// Builds a two-tier <option> list: known sizes for this peptide first,
+// then all other common sizes below a divider, then a custom escape hatch.
+function vialSizeOptionsHtml(peptideId, currentValue){
+  if(isIU(peptideId)){
+    const iu = IU_COMPOUNDS[peptideId].vials;
+    return `<option value="">Vial size...</option>`
+      + `<optgroup label="Common for this peptide">`
+      + iu.map(v => `<option value="${v}" ${String(currentValue)===String(v)?'selected':''}>${v.toLocaleString()} IU</option>`).join("")
+      + `</optgroup>`;
+  }
+  const known = vialSizesFor(peptideId);
+  const others = ALL_COMMON_SIZES.filter(mg => !known.includes(mg));
+  const opt = mg => `<option value="${mg}" ${String(currentValue)===String(mg)?'selected':''}>${mg} mg</option>`;
+  const knownLabel = VIAL_SIZES[peptideId] ? "Common for this peptide" : "Common sizes";
+  return `
+    <option value="">Vial size...</option>
+    <optgroup label="${knownLabel}">${known.map(opt).join("")}</optgroup>
+    <optgroup label="Other sizes">${others.map(opt).join("")}</optgroup>
+    <option value="__custom__">Custom mg...</option>`;
+}
+
+// ---- State ----
+const selected = new Set();        // individually-chosen peptide ids
+const selectedStacks = new Set();  // explicitly-chosen stack ids
+const amountState = {}; // peptideId -> { value, customMode }
+let query = "";
+let customBlendOpen = false;
+
+// ---- Helpers ----
+function stackState(stack){
+  // A stack is only checked when explicitly chosen. Previously this was inferred
+  // from its components, which made subset stacks (Wolverine inside KLOW)
+  // self-select.
+  return selectedStacks.has(stack.id) ? "full" : "none";
+}
+
+function toggleStack(stack){
+  if(selectedStacks.has(stack.id)) selectedStacks.delete(stack.id);
+  else selectedStacks.add(stack.id);
+  render();
+}
+
+// Peptide ids covered by any explicitly-selected stack
+function idsInSelectedStacks(){
+  const s = new Set();
+  STACKS.forEach(st => {
+    if(selectedStacks.has(st.id)) st.components.forEach(id => s.add(id));
+  });
+  return s;
+}
+
+function togglePeptide(id){
+  if(selected.has(id)) selected.delete(id); else selected.add(id);
+  render();
+}
+
+function tagsHtml(tags){
+  return tags.map(t => `<span class="tag ${t}">${TAG_LABEL[t]}</span>`).join("");
+}
+
+function matches(name){
+  if(!query) return true;
+  return name.toLowerCase().includes(query.toLowerCase());
+}
+
+// ---- Render ----
+function render(){
+  // Stacks
+  const visibleStacks = STACKS.filter(s => matches(s.name) || s.components.some(id => matches(PEPTIDES.find(p=>p.id===id).name)));
+  const stackList = document.getElementById("stackList");
+  const stackRowsHtml = visibleStacks.length ? visibleStacks.map(s => {
+    const state = stackState(s);
+    const boxClass = state === "full" ? "checked" : state === "partial" ? "partial" : "";
+    const compNames = s.components.map(id => PEPTIDES.find(p=>p.id===id).name).join(" + ");
+    return `
+      <div class="stack-row" data-stack="${s.id}">
+        <div class="box ${boxClass}"></div>
+        <div class="row-main">
+          <div class="row-title"><span class="abbr">${s.name}</span>${tagsHtml(s.tags)}</div>
+          <div class="row-sub">${s.note}</div>
+          <div class="row-components">${compNames}</div>
+        </div>
+      </div>`;
+  }).join("") : `<div class="empty">No stacks match "${query}"</div>`;
+
+  stackList.innerHTML = stackRowsHtml;
+
+  const fullCount = selectedStacks.size;
+  document.getElementById("stackCount").textContent = `${fullCount} / ${STACKS.length}`;
+
+  // Custom blend toggle (its own section)
+  const customToggleHost = document.getElementById("customToggleHost");
+  if(customToggleHost){
+    customToggleHost.innerHTML = `
+      <div class="stack-row custom-toggle-row">
+        <div class="box ${customBlendOpen ? 'checked' : ''}"></div>
+        <div class="row-main">
+          <div class="row-title"><span class="abbr">Build Custom Blend</span><span class="tag" style="color:var(--amber); border-color: rgba(232,162,58,0.35);">TOOL</span></div>
+          <div class="row-sub">Blend not listed above? Check to build it yourself</div>
+        </div>
+      </div>`;
+  }
+
+  // Peptides
+  const visiblePeptides = PEPTIDES.filter(p => matches(p.name));
+  const peptideList = document.getElementById("peptideList");
+  const stackCovered = idsInSelectedStacks();
+  const peptideRowsHtml = visiblePeptides.length ? visiblePeptides.map(p => {
+    const isChecked = selected.has(p.id);
+    const inBlend = stackCovered.has(p.id);
+    const blendHint = (inBlend && !isChecked)
+      ? `<span class="tag" style="color:var(--dim); border-style:dashed;">IN BLEND</span>` : "";
+    return `
+      <div class="peptide-row" data-peptide="${p.id}">
+        <div class="box ${isChecked ? 'checked' : ''}"></div>
+        <div class="row-main">
+          <div class="row-title"><span class="abbr">${p.name}</span>${tagsHtml(p.tags)}${blendHint}</div>
+        </div>
+      </div>`;
+  }).join("") : `<div class="empty">No peptides match "${query}"</div>`;
+
+  peptideList.innerHTML = peptideRowsHtml;
+
+  const checkedPeptideCount = PEPTIDES.filter(p => selected.has(p.id)).length;
+  document.getElementById("peptideCount").textContent = `${checkedPeptideCount} / ${PEPTIDES.length}`;
+
+  // Summary (elements only exist while page 1's bar is mounted)
+  const stackNames = STACKS.filter(s => selectedStacks.has(s.id)).map(s => s.name);
+  const looseNames = Array.from(selected).map(id => PEPTIDES.find(p=>p.id===id).name);
+  const names = stackNames.concat(looseNames);
+  const elCount = document.getElementById("selectedCount");
+  const elList  = document.getElementById("selectedList");
+  const elCont  = document.getElementById("continueBtn");
+  if(elCount) elCount.textContent = `${names.length} selected`;
+  if(elList)  elList.textContent = names.length ? names.join(", ") : "Nothing selected yet";
+  if(elCont)  elCont.disabled = names.length === 0;
+
+  // rebind
+  document.querySelectorAll(".stack-row:not(.custom-toggle-row)").forEach(row => {
+    row.onclick = () => toggleStack(STACKS.find(s => s.id === row.dataset.stack));
+  });
+  document.querySelectorAll(".peptide-row").forEach(row => {
+    row.onclick = () => togglePeptide(row.dataset.peptide);
+  });
+  const toggleRowEl = document.querySelector(".custom-toggle-row");
+  if(toggleRowEl){
+    toggleRowEl.onclick = () => {
+      customBlendOpen = !customBlendOpen;
+      render();
+    };
+  }
+
+  // render() is authoritative for builder visibility
+  const builderSection = document.getElementById("customBlockSection");
+  if(builderSection){
+    builderSection.style.display = customBlendOpen ? "block" : "none";
+  }
+  document.querySelectorAll(".ind-amount-preset").forEach(sel => {
+    sel.onclick = (e) => e.stopPropagation();
+    sel.onchange = (e) => {
+      const id = e.target.dataset.amt;
+      if(e.target.value === "__custom__"){
+        amountState[id] = { value: "", customMode: true };
+      } else {
+        amountState[id] = { value: e.target.value, customMode: false };
+      }
+      render();
+    };
+  });
+  document.querySelectorAll(".ind-amount-custom").forEach(inp => {
+    inp.onclick = (e) => e.stopPropagation();
+    inp.oninput = (e) => {
+      const id = e.target.dataset.amt;
+      amountState[id] = { value: e.target.value, customMode: true };
+    };
+  });
+  document.querySelectorAll(".ind-back-preset").forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const id = e.target.dataset.amt;
+      amountState[id] = { value: "", customMode: false };
+      render();
+    };
+  });
+}
+
+function renderIndividualAmountControl(id){
+  const state = amountState[id] || { value: "", customMode: false };
+  if(state.customMode){
+    return `
+      <div style="margin-top:7px; display:flex; gap:6px;" onclick="event.stopPropagation()">
+        <input data-amt="${id}" class="ind-amount-custom" type="number" step="0.1" placeholder="mg" value="${state.value}"
+          style="width:78px; background: var(--bg); border:1px solid var(--amber); color:var(--text); font-size:12px; padding:6px 8px; border-radius:3px;">
+        <button data-amt="${id}" class="ind-back-preset" title="Back to standard sizes" style="background:transparent; border:1px solid var(--line); color:var(--dim); font-size:11px; padding:6px; border-radius:3px; cursor:pointer;">⇤</button>
+      </div>`;
+  }
+  return `
+    <div style="margin-top:7px;" onclick="event.stopPropagation()">
+      <select data-amt="${id}" class="ind-amount-preset" style="background: var(--bg); border:1px solid var(--line); color:var(--text); font-size:12px; padding:6px 8px; border-radius:3px;">
+        ${vialSizeOptionsHtml(id, state.value)}
+      </select>
+    </div>`;
+}
+
+document.getElementById("searchInput").addEventListener("input", (e) => {
+  query = e.target.value;
+  render();
+});
+
+
+render();
+
+// ---- Custom Blend Builder ----
+const FLAVOR = {
+  cog: {
+    adj: ["Brainy","Sharp","Focused","Overclocked","Zen","Clairvoyant","Laser-Focused","Big-Brain","Unblinking"],
+    noun: ["Einstein","The Professor","Oracle","Mastermind","Think Tank","Synapse","Braincase","Yoda","The Overthinker"]
+  },
+  gh: {
+    adj: ["Swole","Jacked","Beefy","Massive","Alpha","Herculean","Chiseled","Gigantic"],
+    noun: ["He-Man","Beefcake","The Hulk","Gains Goblin","Silverback","Meathead","Growth Spurt","The Unit"]
+  },
+  metabolic: {
+    adj: ["Lean","Shredded","Slim","Torched","Featherweight","Snatched","Whittled"],
+    noun: ["Shrinky Dink","Cheat Code","Fat Torch","Slim Shady","The Ozempic Cousin","Diet Mode","Cut Season"]
+  },
+  skin: {
+    adj: ["Glowy","Dewy","Baby-Faced","Ageless","Radiant","Filtered","Poreless"],
+    noun: ["Glow Up","Vampire Facial","Dorian Gray","The Filter (IRL)","Collagen Queen","Skin Twin","Baby Skin"]
+  },
+  repair: {
+    adj: ["Patched","Stitched","Bulletproof","Unbreakable","Regenerated","Duct-Taped","Reinforced"],
+    noun: ["The Fixer","Wolverine Jr.","Phoenix Down","The Mechanic","Patch Kit","Band-Aid Special","The Rebuild"]
+  }
+};
+const CHAOS_SPICE = ["Circus","Florida Man","Group Project","Garage Sale","Group Chat Gone Wrong","Grab Bag","Potluck","Yard Sale","Frankenstein's"];
+
+function cap(s){ return s; }
+function rand(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+const COHERENT_TEMPLATES = [
+  (adj,noun) => `The ${adj} ${noun}`,
+  (adj,noun) => `${noun} Supreme`,
+  (adj,noun) => `Captain ${noun}`,
+  (adj,noun) => `${adj} ${noun} 3000`,
+  (adj,noun) => `Lil' ${noun}`,
+  (adj,noun) => `${noun}, But Make It ${adj}`,
+  (adj,noun) => `${adj} ${noun} Energy`,
+];
+const CHAOTIC_TEMPLATES = [
+  (adj,noun) => `${adj} ${noun}`,
+  (adj,noun) => `The ${adj} ${noun} Situation`,
+  (adj,noun) => `${noun}'s ${adj} Cousin`,
+  (adj,noun,spice) => `${spice} of ${noun}`,
+  (adj,noun,spice) => `${adj} ${spice}`,
+  (adj,noun) => `${noun}, Somehow ${adj}`,
+];
+const TAG_NAME = { repair:"repair", skin:"skin", gh:"GH-axis", metabolic:"metabolic", cog:"cognitive" };
+
+let blendRows = [ {peptideId: "", amount: "", customMode: false} ];
+
+function renderBlendRows(){
+  const container = document.getElementById("blendRows");
+  container.innerHTML = blendRows.map((row, i) => {
+    const options = PEPTIDES.map(p => `<option value="${p.id}" ${row.peptideId===p.id?'selected':''}>${p.name}</option>`).join("");
+
+    let amountControl;
+    if(!row.peptideId){
+      amountControl = `<select disabled style="width:110px; background: var(--bg); border:1px solid var(--line); color:var(--dim); font-size:13px; padding:9px 8px; border-radius:3px;"><option>mg —</option></select>`;
+    } else if(row.customMode){
+      amountControl = `
+        <input data-idx="${i}" class="blend-amount-custom" type="number" step="0.1" placeholder="mg" value="${row.amount}"
+          style="width:78px; background: var(--bg); border:1px solid var(--amber); color:var(--text); font-size:13px; padding:9px 8px; border-radius:3px;">
+        <button data-idx="${i}" class="blend-back-preset" title="Back to standard sizes" style="background:transparent; border:1px solid var(--line); color:var(--dim); font-size:11px; padding:8px 6px; border-radius:3px; cursor:pointer;">⇤</button>`;
+    } else {
+      amountControl = `
+        <select data-idx="${i}" class="blend-amount-preset" style="width:110px; background: var(--bg); border:1px solid var(--line); color:var(--text); font-size:13px; padding:9px 8px; border-radius:3px;">
+          ${vialSizeOptionsHtml(row.peptideId, row.amount)}
+        </select>`;
+    }
+
+    return `
+      <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center;">
+        <select data-idx="${i}" class="blend-select" style="flex:1.6; background: var(--bg); border:1px solid var(--line); color:var(--text); font-size:13px; padding:9px 8px; border-radius:3px;">
+          <option value="">Select peptide...</option>
+          ${options}
+        </select>
+        ${amountControl}
+        ${blendRows.length > 1 ? `<button data-idx="${i}" class="blend-remove" style="background:transparent; border:none; color:var(--danger); font-size:16px; cursor:pointer; padding:0 4px;">×</button>` : `<span style="width:20px;"></span>`}
+      </div>`;
+  }).join("");
+
+  document.getElementById("blendSlotCount").textContent = `${blendRows.filter(r=>r.peptideId).length} / 5`;
+  document.getElementById("addBlendRow").style.display = blendRows.length >= 5 ? "none" : "inline-block";
+
+  container.querySelectorAll(".blend-select").forEach(sel => {
+    sel.onchange = (e) => {
+      const idx = +e.target.dataset.idx;
+      blendRows[idx].peptideId = e.target.value;
+      blendRows[idx].amount = "";
+      blendRows[idx].customMode = false;
+      renderBlendRows();
+    };
+  });
+  container.querySelectorAll(".blend-amount-preset").forEach(sel => {
+    sel.onchange = (e) => {
+      const idx = +e.target.dataset.idx;
+      if(e.target.value === "__custom__"){
+        blendRows[idx].customMode = true;
+        blendRows[idx].amount = "";
+        renderBlendRows();
+      } else {
+        blendRows[idx].amount = e.target.value;
+      }
+    };
+  });
+  container.querySelectorAll(".blend-amount-custom").forEach(inp => {
+    inp.oninput = (e) => { blendRows[+e.target.dataset.idx].amount = e.target.value; };
+  });
+  container.querySelectorAll(".blend-back-preset").forEach(btn => {
+    btn.onclick = (e) => {
+      const idx = +e.target.dataset.idx;
+      blendRows[idx].customMode = false;
+      blendRows[idx].amount = "";
+      renderBlendRows();
+    };
+  });
+  container.querySelectorAll(".blend-remove").forEach(btn => {
+    btn.onclick = (e) => {
+      blendRows.splice(+e.target.dataset.idx, 1);
+      renderBlendRows();
+    };
+  });
+}
+
+document.getElementById("addBlendRow").addEventListener("click", () => {
+  if(blendRows.length < 5){
+    blendRows.push({peptideId:"", amount:"", customMode:false});
+    renderBlendRows();
+  }
+});
+
+function pickName(tagShares, totalMg){
+  // Rank all present tags by weighted mg share, descending
+  const ranked = Object.entries(tagShares)
+    .map(([tag, mg]) => ({ tag, share: mg / totalMg }))
+    .sort((a,b) => b.share - a.share);
+
+  const top = ranked[0];
+  const isCoherent = top.share >= 0.55;
+
+  let name;
+  if(isCoherent){
+    const bank = FLAVOR[top.tag];
+    const adj = rand(bank.adj);
+    const noun = rand(bank.noun);
+    name = rand(COHERENT_TEMPLATES)(adj, noun);
+  } else {
+    // Pull flavor from two DIFFERENT dominant categories so the name
+    // actually reflects the mismatch, instead of just being random.
+    const catA = ranked[0].tag;
+    const catB = ranked[1] ? ranked[1].tag : ranked[0].tag;
+    const adj = rand(FLAVOR[catA].adj);
+    const noun = rand(FLAVOR[catB].noun);
+    const spice = rand(CHAOS_SPICE);
+    name = rand(CHAOTIC_TEMPLATES)(adj, noun, spice);
+  }
+
+  return { name, isCoherent, dominant: top.tag, dominantShare: top.share };
+}
+
+let lastBlendCalc = null;
+
+function calculateAndGenerate(){
+  const validRows = blendRows.filter(r => r.peptideId && r.amount && parseFloat(r.amount) > 0);
+  if(validRows.length === 0){
+    alert("Add at least one peptide with an amount first.");
+    return;
+  }
+  const vialSize = parseFloat(document.getElementById("vialSize").value);
+  if(!vialSize || vialSize <= 0){
+    alert("Enter a vial size (mL) first.");
+    return;
+  }
+
+  const tagShares = {};
+  let totalMg = 0;
+  const componentLines = [];
+
+  validRows.forEach(row => {
+    const pep = PEPTIDES.find(p => p.id === row.peptideId);
+    const mg = parseFloat(row.amount);
+    totalMg += mg;
+    const perTag = mg / pep.tags.length;
+    pep.tags.forEach(t => { tagShares[t] = (tagShares[t] || 0) + perTag; });
+    const concentration = (mg / vialSize).toFixed(2);
+    componentLines.push(`${pep.name} — ${mg}mg in ${vialSize}mL &rarr; ${concentration} mg/mL`);
+  });
+
+  lastBlendCalc = { tagShares, totalMg, componentLines, validRows };
+  showBlendResult();
+}
+
+function showBlendResult(){
+  if(!lastBlendCalc) return;
+  const { name, isCoherent, dominant, dominantShare } = pickName(lastBlendCalc.tagShares, lastBlendCalc.totalMg);
+  document.getElementById("blendResult").style.display = "block";
+  document.getElementById("blendName").textContent = name;
+  currentCustomBlendName = name;
+  document.getElementById("blendVerdict").textContent = isCoherent
+    ? `${Math.round(dominantShare*100)}% ${TAG_NAME[dominant]}-leaning — this blend actually has a coherent focus.`
+    : `No single mechanism dominates (top category only ${Math.round(dominantShare*100)}%) — this is a genuine grab-bag stack.`;
+  document.getElementById("blendConcentrations").innerHTML = lastBlendCalc.componentLines.join("<br>");
+}
+
+document.getElementById("generateNameBtn").addEventListener("click", calculateAndGenerate);
+document.getElementById("regenBtn").addEventListener("click", showBlendResult);
+
+renderBlendRows();
+
+// ================= PAGE 2 =================
+// Descriptive research-context notes. Mechanism-focused, not benefit claims.
+const EFFECTS = {
+  "5amino1mq":"NNMT inhibitor; studied in metabolic and adipocyte research.",
+  "ace031":"Activin receptor IIB decoy; studied in muscle mass research. Trials halted over vascular findings.",
+  "adamax":"Semax analog with adamantane modification; BDNF/TrkB signaling research. Very limited human data.",
+  "adipotide":"Pro-apoptotic peptide targeting adipose vasculature; preclinical only, renal findings noted.",
+  "aicar":"AMPK activator; endurance and glucose-uptake research. WADA prohibited.",
+  "aod9604":"HGH fragment analog; studied for lipolytic activity without GH-axis effects.",
+  "ara290":"EPO-derived, non-erythropoietic; studied in neuropathic pain and sarcoidosis research.",
+  "argireline":"Topical cosmetic hexapeptide; studied for expression-line appearance. Not injected.",
+  "bpc157":"Pentadecapeptide; angiogenesis and soft-tissue/gut repair research. Preclinical evidence base.",
+  "cagrilintide":"Amylin analog; satiety research, often studied alongside semaglutide.",
+  "cerebrolysin":"Porcine-derived neuropeptide preparation; stroke and dementia research. Supplied as ampoules.",
+  "cjc1295":"GHRH analog; increases GH pulse amplitude. DAC and no-DAC forms differ substantially.",
+  "dsip":"Delta sleep-inducing peptide; sleep architecture research. Sparse modern data.",
+  "epithalon":"Tetrapeptide; telomerase and pineal regulation research, largely Russian literature.",
+  "exenatide":"GLP-1 receptor agonist (approved as Byetta/Bydureon). Dosed in mcg.",
+  "follistatin":"Myostatin-binding protein; muscle research. Gene-therapy context, poorly characterized as a peptide.",
+  "ghkcu":"Copper tripeptide; collagen synthesis, wound remodeling, antioxidant research.",
+  "ghrh":"Native growth-hormone-releasing hormone; short half-life.",
+  "ghrp1":"Ghrelin-receptor secretagogue; older-generation, less selective.",
+  "ghrp2":"Ghrelin-receptor secretagogue; raises GH with modest prolactin/cortisol effect.",
+  "ghrp6":"Ghrelin-receptor secretagogue; marked appetite stimulation.",
+  "glutathione":"Endogenous antioxidant tripeptide; oxidative-stress research. Poor oral bioavailability.",
+  "gonadorelin":"GnRH analog; stimulates LH/FSH. Used in fertility and HPTA research.",
+  "hcg":"Glycoprotein hormone; LH-mimetic, HPTA support research. Dosed in IU, not mg.",
+  "hexarelin":"Potent ghrelin-receptor secretagogue; rapid receptor desensitization noted.",
+  "hgh-frag":"HGH 176-191 fragment; lipolysis research without IGF-1 elevation.",
+  "humanin":"Mitochondrial-derived peptide; cytoprotection and metabolic research.",
+  "igf1lr3":"Long-acting IGF-1 analog; extended half-life via reduced IGFBP binding. Hypoglycemia risk noted.",
+  "ipamorelin":"Selective ghrelin-receptor secretagogue; minimal cortisol/prolactin impact.",
+  "kisspeptin":"Upstream GnRH regulator; reproductive-axis research.",
+  "klotho":"Longevity-associated protein; cognitive and renal research. Very early stage.",
+  "kpv":"Alpha-MSH C-terminal tripeptide; anti-inflammatory and gut-barrier research.",
+  "larazotide":"Zonulin antagonist; tight-junction/celiac research. Oral administration.",
+  "liraglutide":"GLP-1 receptor agonist (approved as Victoza/Saxenda). Daily dosing.",
+  "ll37":"Cathelicidin antimicrobial peptide; innate immunity research. Pro-inflammatory potential.",
+  "melanotan1":"Afamelanotide; MC1R-selective melanogenesis. Approved in EU for EPP.",
+  "melanotan2":"Non-selective melanocortin agonist; melanogenesis plus MC4R effects. Nausea/flushing common.",
+  "mk677":"Ibutamoren; orally active ghrelin mimetic. Raises GH/IGF-1; insulin sensitivity and water retention noted.",
+  "motsc":"Mitochondrial-derived peptide; AMPK-linked metabolic and exercise-mimetic research.",
+  "nad":"Nicotinamide adenine dinucleotide; cellular energy and sirtuin research.",
+  "oxytocin":"Nonapeptide hormone; social bonding, lactation, and anxiolytic research.",
+  "p21":"Neurogenic peptide derived from CNTF; BDNF-pathway and neurogenesis research.",
+  "pinealon":"Short peptide bioregulator; neuroprotection research, largely Russian literature.",
+  "pt141":"Bremelanotide; MC4R agonist for sexual arousal. Approved as Vyleesi. Nausea and BP effects noted.",
+  "retatrutide":"Triple GIP/GLP-1/glucagon agonist; Phase 3 obesity research.",
+  "selank":"Tuftsin analog; anxiolytic and GABAergic research without sedation.",
+  "semaglutide":"GLP-1 receptor agonist (Ozempic/Wegovy). Requires titration; GI effects common.",
+  "semax":"ACTH(4-10) analog; BDNF/neuroprotection research. Established Russian clinical history.",
+  "sermorelin":"GHRH(1-29) fragment; GH-axis stimulation, short half-life.",
+  "setmelanotide":"MC4R agonist; approved for rare genetic obesity (Imcivree).",
+  "snap8":"Topical octapeptide, Argireline extension; cosmetic use only.",
+  "ss31":"Elamipretide; cardiolipin-targeting mitochondrial peptide, clinical-stage.",
+  "survodutide":"Dual GLP-1/glucagon agonist; obesity and MASH research.",
+  "tb500":"Thymosin beta-4 fragment; actin regulation, angiogenesis, tissue repair research.",
+  "tesamorelin":"GHRH analog; approved (Egrifta) for HIV-associated lipodystrophy. Visceral fat data.",
+  "thymalin":"Thymic peptide preparation; immune regulation research, Russian literature.",
+  "thymogen":"Thymic dipeptide; immunomodulation research.",
+  "thymosina1":"Thymalfasin; T-cell modulation, approved in some countries for hepatitis/immune indications.",
+  "thymosinb4":"Full-length parent protein of TB-500; repair and anti-fibrotic research.",
+  "tirzepatide":"Dual GIP/GLP-1 agonist (Mounjaro/Zepbound). Requires titration.",
+  "vip":"Vasoactive intestinal peptide; vasodilation, immune modulation, circadian research. Often intranasal in CIRS protocols."
+};
+
+// Mechanism-overlap groups. Flags redundancy/stacking overlap — structural, not medical advice.
+const CONFLICT_GROUPS = [
+  { ids:["semaglutide","tirzepatide","retatrutide","liraglutide","exenatide","survodutide"],
+    label:"Multiple incretin (GLP-1 class) agonists",
+    detail:"These act on overlapping GLP-1/GIP receptor pathways. Running more than one at once is generally considered redundant and compounds GI effects." },
+  { ids:["ipamorelin","ghrp1","ghrp2","ghrp6","hexarelin","mk677"],
+    label:"Multiple ghrelin-receptor secretagogues",
+    detail:"All hit the same GHS-R receptor. Combining them mostly adds side effects rather than GH output, and hexarelin/MK-677 desensitize the receptor." },
+  { ids:["cjc1295","sermorelin","tesamorelin","ghrh"],
+    label:"Multiple GHRH analogs",
+    detail:"Same receptor and mechanism, differing only in half-life. Typically one is chosen rather than stacked." },
+  { ids:["melanotan1","melanotan2"],
+    label:"Both melanocortin agonists",
+    detail:"Overlapping melanogenesis pathway; MT-II is non-selective and adds MC4R effects on top of MT-I's action." },
+  { ids:["semax","adamax","p21"],
+    label:"Multiple BDNF-pathway nootropics",
+    detail:"Adamax is a Semax analog and P21 shares its adamantane modification. Substantially overlapping mechanism." },
+  { ids:["tb500","thymosinb4"],
+    label:"TB-500 with full-length Thymosin Beta-4",
+    detail:"TB-500 is an active fragment of Thymosin Beta-4. Running both is duplicative." },
+  { ids:["thymalin","thymogen","thymosina1"],
+    label:"Multiple thymic peptides",
+    detail:"Overlapping immunomodulatory mechanism." },
+  { ids:["igf1lr3","mk677"],
+    label:"IGF-1 LR3 with MK-677",
+    detail:"Both raise IGF-1 signaling by different routes; combined effect on glucose handling is commonly flagged." },
+  { ids:["glutathione","nad"],
+    label:"Glutathione with NAD+",
+    detail:"Not a conflict — commonly co-administered. Listed for awareness only.", benign:true }
+];
+
+
+var currentCustomBlendName = null;
+// Standard BAC water volumes and dose ladders for the recon dropdowns
+const BAC_VOLUMES = [0.5, 1, 1.5, 2, 2.5, 3, 5];
+const BLEND_TOTALS = [10,20,30,40,50,60,70,80,90,100,120,150];
+const COMPONENT_MG = [1,2,2.5,5,10,15,20,25,30,40,50,60,75,100];
+const DOSE_MCG = [10,20,25,50,100,150,200,250,300,400,500,600,750,1000,1500,2000,2500,5000];
+const DOSE_MG  = [0.25,0.5,1,1.5,2,2.5,3,4,5,7.5,10,12.5,15,20,30,50];
+
+function optionList(values, current, suffix){
+  return values.map(v =>
+    '<option value="' + v + '"' + (String(current)===String(v) ? ' selected' : '') + '>' + v + (suffix||'') + '</option>'
+  ).join("");
+}
+
+// U-100 insulin syringes: capacity in units, and the increment between printed marks
+const SYRINGES = [
+  { id:"u100_30",  label:"0.3 mL (30 unit)",  units:30,  step:1 },
+  { id:"u100_50",  label:"0.5 mL (50 unit)",  units:50,  step:1 },
+  { id:"u100_100", label:"1 mL (100 unit)",   units:100, step:2 }
+];
+function syringeById(id){ return SYRINGES.find(s => s.id === id) || SYRINGES[1]; }
+
+// Solve for the BAC water volume that puts the desired dose on the cleanest
+// readable mark of the chosen syringe. Returns null if nothing works.
+function solveRecon(vialMg, doseMg, syringe){
+  if(!(vialMg > 0) || !(doseMg > 0)) return null;
+  let best = null;
+  BAC_VOLUMES.forEach(bac => {
+    const conc = vialMg / bac;          // mg/mL
+    const units = (doseMg / conc) * 100; // U-100 units
+    if(units > syringe.units) return;    // won't fit in one draw
+    if(units < 4) return;                // too small to measure reliably
+    const onMark = Math.abs(units / syringe.step - Math.round(units / syringe.step)) < 0.001;
+    const rounded = Math.round(units);
+    let score = 0;
+    if(onMark) score += 100;                       // lands exactly on a printed mark
+    if(rounded % 10 === 0 && onMark) score += 40;  // round tens are easiest to read
+    else if(rounded % 5 === 0 && onMark) score += 20;
+    score += Math.min(units, syringe.units) / syringe.units * 15; // favour further up the barrel
+    if(!best || score > best.score) best = { bac, conc, units, onMark, score, doses: Math.floor(vialMg/doseMg) };
+  });
+  return best;
+}
+
+let openReconId = null;   // only one reconstitution panel open at a time
+const reconState = {};    // key -> { vialMg, bacMl, targetDose, targetUnit }
+
+// Build the alphabetized list of selected items (blends first-class, then loose peptides)
+function buildProtocolItems(){
+  const items = [];
+  const claimed = new Set();
+
+  // Explicitly-selected stacks become single blend entries
+  STACKS.filter(s => selectedStacks.has(s.id)).forEach(s => {
+    items.push({
+      key: "stack:" + s.id,
+      name: s.name,
+      type: "blend",
+      tags: s.tags,
+      componentIds: s.components,
+      note: s.note
+    });
+    s.components.forEach(id => claimed.add(id));
+  });
+
+  // Custom blend, if built
+  if(customBlendOpen && lastBlendCalc){
+    const compIds = lastBlendCalc.validRows.map(r => r.peptideId);
+    items.push({
+      key: "custom:blend",
+      name: currentCustomBlendName || "Custom Blend",
+      type: "blend",
+      tags: [],
+      componentIds: compIds,
+      note: "Your custom blend",
+      customRows: lastBlendCalc.validRows
+    });
+    compIds.forEach(id => claimed.add(id));
+  }
+
+  // Remaining individually-selected peptides
+  PEPTIDES.forEach(p => {
+    if(selected.has(p.id) && !claimed.has(p.id)){
+      items.push({
+        key: "pep:" + p.id,
+        name: p.name,
+        type: "peptide",
+        tags: p.tags,
+        componentIds: [p.id],
+        peptideId: p.id
+      });
+    }
+  });
+
+  return items.sort((a,b) => a.name.localeCompare(b.name));
+}
+
+// Flatten every active compound (inside blends too) for conflict checking
+function activeCompoundIds(items){
+  const s = new Set();
+  items.forEach(it => it.componentIds.forEach(id => s.add(id)));
+  return s;
+}
+
+function findConflicts(items){
+  const active = activeCompoundIds(items);
+  const out = [];
+
+  // Mechanism-overlap groups
+  CONFLICT_GROUPS.forEach(g => {
+    const hits = g.ids.filter(id => active.has(id));
+    if(hits.length >= 2){
+      out.push({
+        label: g.label,
+        detail: g.detail,
+        benign: !!g.benign,
+        names: hits.map(id => PEPTIDES.find(p=>p.id===id).name)
+      });
+    }
+  });
+
+  // Duplicate compound appearing in more than one selected item
+  const counts = {};
+  items.forEach(it => it.componentIds.forEach(id => {
+    counts[id] = (counts[id] || 0) + 1;
+  }));
+  Object.entries(counts).filter(([,n]) => n > 1).forEach(([id,n]) => {
+    const pname = PEPTIDES.find(p=>p.id===id).name;
+    const carriers = items.filter(it => it.componentIds.includes(id)).map(it => it.name);
+    out.push({
+      label: pname + " appears in " + n + " selected items",
+      detail: "Present in: " + carriers.join(", ") + ". Total exposure is the sum of all of them.",
+      benign: false,
+      names: [pname],
+      duplicate: true
+    });
+  });
+
+  return out;
+}
+
+function renderPage2(){
+  const items = buildProtocolItems();
+
+  // --- Conflicts ---
+  const conflicts = findConflicts(items);
+  const cSection = document.getElementById("conflictSection");
+  const cList = document.getElementById("conflictList");
+  if(conflicts.length === 0){
+    cSection.style.display = "none";
+  } else {
+    cSection.style.display = "block";
+    document.getElementById("conflictCount").textContent = conflicts.length + (conflicts.length===1?" flag":" flags");
+    cList.innerHTML = conflicts.map(c => {
+      const accent = c.benign ? "var(--dim)" : (c.duplicate ? "var(--amber)" : "var(--danger)");
+      const mark = c.benign ? "\u2022" : "\u26A0";
+      return '<div style="padding:12px 16px; border-bottom:1px solid var(--line); display:flex; gap:10px;">'
+        + '<span style="color:' + accent + '; font-size:14px; line-height:1.3;">' + mark + '</span>'
+        + '<div style="flex:1; min-width:0;">'
+        + '<div style="font-size:13.5px; color:' + accent + '; font-weight:500;">' + c.label + '</div>'
+        + '<div style="font-size:12px; color:var(--dim); margin-top:3px; line-height:1.5;">' + c.detail + '</div>'
+        + '</div></div>';
+    }).join("");
+  }
+
+  // --- Compound list ---
+  document.getElementById("protocolCount").textContent = items.length + (items.length===1?" item":" items");
+  const pList = document.getElementById("protocolList");
+
+  if(items.length === 0){
+    pList.innerHTML = '<div class="empty">Nothing selected. Go back and pick some compounds.</div>';
+    return;
+  }
+
+  pList.innerHTML = items.map(it => {
+    const isOpen = openReconId === it.key;
+    const compLine = it.type === "blend"
+      ? '<div class="row-components">' + it.componentIds.map(id => PEPTIDES.find(p=>p.id===id).name).join(" + ") + '</div>'
+      : '';
+    const effects = it.type === "peptide"
+      ? (EFFECTS[it.peptideId] || "No summary available for this compound yet.")
+      : it.componentIds.map(id => {
+          const p = PEPTIDES.find(x=>x.id===id);
+          return '<div style="margin-top:5px;"><b style="color:var(--text); font-weight:500;">' + p.name + '</b> — ' + (EFFECTS[id] || "No summary available.") + '</div>';
+        }).join("");
+
+    return '<div style="border-bottom:1px solid var(--line);">'
+      + '<div style="padding:14px 16px;">'
+      +   '<div style="min-width:0;">'
+      +     '<div class="row-title"><span class="abbr">' + it.name + '</span>'
+      +       (it.type === "blend" ? '<span class="tag" style="color:var(--amber); border-color:rgba(232,162,58,0.35);">BLEND</span>' : '')
+      +       tagsHtml(it.tags)
+      +     '</div>'
+      +     compLine
+      +     '<div style="font-size:12px; color:var(--dim); margin-top:6px; line-height:1.5;">' + effects + '</div>'
+      +   '</div>'
+      +   '<div class="recon-btn" data-key="' + it.key + '" style="display:flex; align-items:center; gap:10px; margin-top:12px; cursor:pointer; user-select:none;">'
+      +     '<div class="box ' + (isOpen ? 'checked' : '') + '"></div>'
+      +     '<span style="font-family:var(--mono); font-size:11.5px; color:' + (isOpen ? 'var(--cyan)' : 'var(--dim)') + '; letter-spacing:0.04em;">Select to Reconstitute</span>'
+      +   '</div>'
+      + '</div>'
+      + (isOpen ? renderReconPanel(it) : '')
+      + '</div>';
+  }).join("");
+
+  // bind recon buttons — accordion, only one open
+  document.querySelectorAll(".recon-btn").forEach(btn => {
+    btn.onclick = () => {
+      const k = btn.dataset.key;
+      openReconId = (openReconId === k) ? null : k;
+      renderPage2();
+    };
+  });
+  bindReconInputs();
+}
+
+function renderReconPanel(it){
+  const st = reconState[it.key] || {};
+  const isIuItem = it.type === "peptide" && isIU(it.peptideId);
+  const unit = isIuItem ? "iu" : (st.targetUnit || "mg");
+  const syrId = st.syringe || "u100_100";
+  const syringe = syringeById(syrId);
+
+  // ---- Vial contents ----
+  // Blends: one mg dropdown per component, auto-summed into the vial total.
+  // Single peptides: one vial-size dropdown.
+  let vialControl, fixedTotal = null, componentMg = null;
+
+  if(it.type === "blend"){
+    st.parts = st.parts || {};
+    // Seed from a custom blend's own amounts the first time
+    if(it.customRows && Object.keys(st.parts).length === 0){
+      it.customRows.forEach(r => { st.parts[r.peptideId] = r.amount; });
+      reconState[it.key] = st;
+    }
+    componentMg = {};
+    let sum = 0, allSet = true;
+    const partRows = it.componentIds.map(id => {
+      const p = PEPTIDES.find(x => x.id === id);
+      const val = st.parts[id] || "";
+      if(val) { componentMg[id] = parseFloat(val); sum += parseFloat(val); }
+      else allSet = false;
+      return '<div style="display:flex; align-items:center; gap:8px; margin-top:6px;">'
+        + '<span style="flex:1; min-width:0; font-size:12.5px; color:var(--text);">' + p.name + '</span>'
+        + '<select class="recon-in" data-key="' + it.key + '" data-f="part:' + id + '" style="width:104px; background:var(--bg); border:1px solid var(--line); color:var(--text); font-size:13px; padding:7px; border-radius:3px;">'
+        +   '<option value="">mg...</option>' + optionList(COMPONENT_MG, val, ' mg')
+        + '</select></div>';
+    }).join("");
+
+    fixedTotal = allSet ? sum : null;
+    vialControl = '<div style="width:100%;">' + partRows
+      + '<div style="display:flex; justify-content:space-between; margin-top:9px; padding-top:9px; border-top:1px solid var(--line); font-family:var(--mono); font-size:12px;">'
+      +   '<span style="color:var(--dim);">VIAL TOTAL</span>'
+      +   '<span style="color:' + (allSet ? 'var(--cyan)' : 'var(--dim)') + ';">' + (allSet ? sum + ' mg' : 'set all amounts') + '</span>'
+      + '</div></div>';
+  } else {
+    vialControl = '<select class="recon-in" data-key="' + it.key + '" data-f="vialMg" style="width:100%; max-width:220px; background:var(--bg); border:1px solid var(--line); color:var(--text); font-size:13px; padding:8px; border-radius:3px;">'
+      + vialSizeOptionsHtml(it.peptideId, st.vialMg || "") + '</select>';
+  }
+
+  // Label stacked above the control so it can never wrap away from its input
+  const row = (label, control) =>
+    '<div style="margin-top:12px;">'
+    + '<div style="font-family:var(--mono); font-size:10px; color:var(--dim); letter-spacing:0.1em; margin-bottom:5px;">' + label + '</div>'
+    + '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">' + control + '</div>'
+    + '</div>';
+
+  const syringeControl = '<select class="recon-in" data-key="' + it.key + '" data-f="syringe" style="width:100%; max-width:220px; background:var(--bg); border:1px solid var(--line); color:var(--text); font-size:13px; padding:8px; border-radius:3px;">'
+    + SYRINGES.map(s => '<option value="' + s.id + '"' + (s.id===syrId?' selected':'') + '>' + s.label + '</option>').join("")
+    + '</select>';
+
+  // Unit of measurement and the number are separate, individually-labeled dropdowns
+  const iuMode = it.type === "peptide" && isIU(it.peptideId);
+  const unitControl = iuMode
+    ? '<select class="recon-in" data-key="' + it.key + '" data-f="targetUnit" style="width:100%; max-width:220px; background:var(--bg); border:1px solid var(--line); color:var(--text); font-size:13px; padding:8px; border-radius:3px;">'
+      +   '<option value="iu" selected>IU (international units)</option>'
+      + '</select>'
+    : '<select class="recon-in" data-key="' + it.key + '" data-f="targetUnit" style="width:100%; max-width:220px; background:var(--bg); border:1px solid var(--line); color:var(--text); font-size:13px; padding:8px; border-radius:3px;">'
+      +   '<option value="mcg"' + (unit==="mcg"?" selected":"") + '>mcg (micrograms)</option>'
+      +   '<option value="mg"' + (unit==="mg"?" selected":"") + '>mg (milligrams)</option>'
+      + '</select>';
+
+  const amountControlDose = '<select class="recon-in" data-key="' + it.key + '" data-f="targetDose" style="width:100%; max-width:220px; background:var(--bg); border:1px solid var(--line); color:var(--text); font-size:13px; padding:8px; border-radius:3px;">'
+    + '<option value="">select amount...</option>'
+    + optionList(iuMode ? IU_COMPOUNDS[it.peptideId].doses : (unit === 'mg' ? DOSE_MG : DOSE_MCG), st.targetDose || "", '')
+    + '</select>';
+
+  // ---- Solve ----
+  const vialMg = parseFloat(fixedTotal !== null ? fixedTotal : st.vialMg);
+  const doseRaw = parseFloat(st.targetDose);
+  // IU compounds are computed natively in IU. The draw volume depends only on the
+  // dose-to-vial ratio, so no IU<->mg conversion is needed or applied.
+  const doseMg = unit === "iu" ? doseRaw : (unit === "mcg" ? doseRaw/1000 : doseRaw);
+  let instructions = '';
+
+  if(vialMg > 0 && doseRaw > 0){
+    const sol = solveRecon(vialMg, doseMg, syringe);
+    if(!sol){
+      instructions = '<div style="margin-top:14px; padding:12px; border-radius:4px; background:rgba(224,90,78,0.1); border:1px solid rgba(224,90,78,0.4); font-size:12.5px; color:var(--text); line-height:1.6;">'
+        + 'No standard BAC water volume puts a ' + doseRaw + ' ' + (unit === 'iu' ? 'IU' : unit) + ' dose on a readable mark of a ' + syringe.label + ' syringe. Try a larger syringe or a different dose.'
+        + '</div>';
+    } else {
+      const hot = v => '<b style="color:#ff2b2b; font-weight:700;">' + v + '</b>';
+      const markText = sol.onMark
+        ? 'the ' + hot(Math.round(sol.units)) + ' unit mark'
+        : 'approximately the ' + hot(sol.units.toFixed(1)) + ' unit position';
+      instructions = '<div style="margin-top:14px; padding:13px; border-radius:4px; background:rgba(198,242,74,0.07); border:1px solid rgba(198,242,74,0.35); font-size:13px; color:var(--text); line-height:1.75;">'
+        + '<div style="font-family:var(--mono); font-size:10px; color:#c6f24a; letter-spacing:0.1em; margin-bottom:7px;">INSTRUCTIONS</div>'
+        + 'Reconstitute with ' + hot(sol.bac + ' mL') + ' of BAC water. '
+        + 'Once fully dissolved, draw to ' + markText + ' on your ' + hot(syringe.label) + ' U-100 insulin syringe. '
+        + 'That equals your desired dose of ' + hot(doseRaw + ' ' + (unit === 'iu' ? 'IU' : unit)) + ' of ' + hot(it.name) + '.'
+        + (componentMg ? (function(){
+            // A blend delivers every component in fixed ratio, so show each one
+            const frac = doseMg / vialMg;
+            return '<div style="margin-top:10px; padding-top:9px; border-top:1px solid var(--line);">'
+              + '<div style="font-family:var(--mono); font-size:10px; color:var(--dim); letter-spacing:0.1em; margin-bottom:5px;">THAT DRAW DELIVERS</div>'
+              + it.componentIds.map(function(id){
+                  const p = PEPTIDES.find(function(x){return x.id===id;});
+                  const mgEach = componentMg[id] * frac;
+                  const shown = mgEach < 1 ? (mgEach*1000).toFixed(1) + ' mcg' : mgEach.toFixed(2) + ' mg';
+                  return '<div style="display:flex; justify-content:space-between; font-size:12px; line-height:1.9;">'
+                    + '<span style="color:var(--text);">' + p.name + '</span>'
+                    + '<span style="font-family:var(--mono); color:#ff2b2b; font-weight:700;">' + shown + '</span>'
+                    + '</div>';
+                }).join("")
+              + '</div>';
+          })() : '')
+        + '<div style="margin-top:9px; padding-top:9px; border-top:1px solid var(--line); font-family:var(--mono); font-size:11.5px; color:var(--dim); line-height:1.7;">'
+        +   'Concentration: ' + sol.conc.toFixed(2) + (unit === 'iu' ? ' IU/mL' : ' mg/mL') + (componentMg ? ' total peptide' : '') + '<br>'
+        +   'Draw volume: ' + (sol.units/100).toFixed(3) + ' mL<br>'
+        +   'Doses of this size per vial: ' + sol.doses
+        +   (syringe.step > 1 ? '<br>Note: this syringe is printed every ' + syringe.step + ' units.' : '')
+        + '</div></div>';
+    }
+  }
+
+  return '<div style="padding:0 16px 16px 16px; background:rgba(79,214,196,0.03);">'
+    + '<div style="font-family:var(--mono); font-size:10.5px; color:var(--dim); letter-spacing:0.1em; padding-top:12px;">RECONSTITUTION</div>'
+    + row(it.type === 'blend' ? 'AMOUNT OF EACH PEPTIDE IN VIAL' : 'VIAL', vialControl)
+    + row('SYRINGE TYPE', syringeControl)
+    + '<div style="margin-top:16px; font-family:var(--mono); font-size:11.5px; color:var(--text); letter-spacing:0.1em;">DESIRED DOSE</div>'
+    + row('UNIT OF MEASUREMENT', unitControl)
+    + row('AMOUNT', amountControlDose)
+    + '<div style="font-size:11px; color:var(--dim); margin-top:9px; line-height:1.45;">Dose comes from your own protocol or source — this tool only works out the mixing and draw for the number you pick.</div>'
+    + instructions
+    + '</div>';
+}
+
+function bindReconInputs(){
+  document.querySelectorAll(".recon-in").forEach(el => {
+    const handler = (e) => {
+      const k = e.target.dataset.key, f = e.target.dataset.f;
+      reconState[k] = reconState[k] || {};
+      if(f.indexOf("part:") === 0){
+        reconState[k].parts = reconState[k].parts || {};
+        reconState[k].parts[f.slice(5)] = e.target.value;
+      } else {
+        reconState[k][f] = e.target.value;
+      }
+      // mg and mcg use different dose ladders, so a carried-over value would be wrong
+      if(f === "targetUnit") reconState[k].targetDose = "";
+      renderPage2();
+    };
+    if(el.tagName === "SELECT") el.onchange = handler;
+    else el.onchange = handler;   // onchange not oninput, so focus is not lost mid-typing
+  });
+}
+
+// ---- Navigation ----
+
+function goToPage2(){
+  document.getElementById("page1").style.display = "none";
+  document.getElementById("page2").style.display = "block";
+  document.getElementById("summaryBar").innerHTML =
+    '<div class="summary-inner">'
+    + '<button class="continue-btn" id="backBtn" style="background:transparent; border:1px solid var(--line); color:var(--cyan);">&larr; Edit selection</button>'
+    + '<div class="summary-list" style="text-align:right; max-width:none;">Tap RECON on any item</div>'
+    + '</div>';
+  document.getElementById("backBtn").onclick = goToPage1;
+  window.scrollTo(0,0);
+  renderPage2();
+}
+
+function goToPage1(){
+  document.getElementById("page2").style.display = "none";
+  document.getElementById("page1").style.display = "block";
+  document.getElementById("summaryBar").innerHTML =
+    '<div class="summary-inner">'
+    + '<div class="summary-left">'
+    +   '<div class="summary-count" id="selectedCount">0 selected</div>'
+    +   '<div class="summary-list" id="selectedList">Nothing selected yet</div>'
+    + '</div>'
+    + '<button class="continue-btn" id="continueBtn" disabled>Continue &rarr;</button>'
+    + '</div>';
+  document.getElementById("continueBtn").onclick = goToPage2;
+  window.scrollTo(0,0);
+  render();
+}
+
+// wire up the initial Continue button (replaces the old alert stub)
+document.getElementById("continueBtn").onclick = goToPage2;
+
+</script>
+</body>
+</html>
